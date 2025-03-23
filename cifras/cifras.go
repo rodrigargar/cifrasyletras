@@ -8,59 +8,62 @@ import (
 type operacion uint8
 
 const (
-	sumar operacion = iota
+	nop operacion = iota
+	sumar
 	restar
 	multiplicar
 	dividir
 )
 
-var operaciones = []operacion{sumar, restar, multiplicar, dividir}
+var operaciones = []operacion{nop, sumar, restar, multiplicar, dividir}
 
 func (op operacion) String() string {
-	return [...]string{"+", "-", "x", "/"}[op]
+	return [...]string{"nop", "+", "-", "x", "/"}[op]
 }
 
 type nodo struct {
-	operando1, operando2 uint32
+	operando1, operando2 *nodo
 	calculo              operacion
-	resultado            uint32
-	operandosPorUsar     []uint32
+	valor                uint32
 	padre                *nodo
 	hijos                []*nodo
+	restantes            []*nodo
 }
 
 func (n *nodo) calcularDescendientes() {
-	for i := 0; i < len(n.operandosPorUsar)-1; i++ {
-		for j := i + 1; j < len(n.operandosPorUsar); j++ {
-			for _, c := range operaciones {
+	progenitores := append(n.restantes, n)
+	for i := 0; i < len(progenitores)-1; i++ {
+		for j := i + 1; j < len(progenitores); j++ {
+			for _, c := range operaciones[sumar:] {
 				hijo := nodo{calculo: c, padre: n}
-				if n.operandosPorUsar[i] >= n.operandosPorUsar[j] {
-					hijo.operando1 = n.operandosPorUsar[i]
-					hijo.operando2 = n.operandosPorUsar[j]
+				if progenitores[i].valor >= progenitores[j].valor {
+					hijo.operando1 = progenitores[i]
+					hijo.operando2 = progenitores[j]
 				} else {
-					hijo.operando1 = n.operandosPorUsar[j]
-					hijo.operando2 = n.operandosPorUsar[i]
+					hijo.operando1 = progenitores[j]
+					hijo.operando2 = progenitores[i]
 				}
 				resultadoValido := true
 				switch c {
 				case sumar:
-					hijo.resultado = hijo.operando1 + hijo.operando2
+					hijo.valor = hijo.operando1.valor + hijo.operando2.valor
 				case restar:
-					hijo.resultado = hijo.operando1 - hijo.operando2
+					hijo.valor = hijo.operando1.valor - hijo.operando2.valor
 				case multiplicar:
-					hijo.resultado = hijo.operando1 * hijo.operando2
+					hijo.valor = hijo.operando1.valor * hijo.operando2.valor
 				case dividir:
-					if hijo.operando2 != 0 && hijo.operando1%hijo.operando2 == 0 {
-						hijo.resultado = hijo.operando1 / hijo.operando2
+					if (hijo.operando2.valor != 0) && (hijo.operando1.valor%hijo.operando2.valor == 0) {
+						hijo.valor = hijo.operando1.valor / hijo.operando2.valor
 					} else {
 						resultadoValido = false
 					}
+				default:
+					resultadoValido = false
 				}
 				if resultadoValido {
-					hijo.operandosPorUsar = append(hijo.operandosPorUsar, hijo.resultado)
-					hijo.operandosPorUsar = append(hijo.operandosPorUsar, n.operandosPorUsar[:i]...)
-					hijo.operandosPorUsar = append(hijo.operandosPorUsar, n.operandosPorUsar[i+1:j]...)
-					hijo.operandosPorUsar = append(hijo.operandosPorUsar, n.operandosPorUsar[j+1:]...)
+					hijo.restantes = append(hijo.restantes, progenitores[:i]...)
+					hijo.restantes = append(hijo.restantes, progenitores[i+1:j]...)
+					hijo.restantes = append(hijo.restantes, progenitores[j+1:]...)
 					n.hijos = append(n.hijos, &hijo)
 					hijo.calcularDescendientes()
 				}
@@ -71,10 +74,10 @@ func (n *nodo) calcularDescendientes() {
 
 func (n *nodo) encontrarAproximacion(objetivo uint32, aproximacion *uint32, candidatos *[]*nodo) {
 	var diferencia uint32
-	if objetivo > n.resultado {
-		diferencia = objetivo - n.resultado
+	if objetivo > n.valor {
+		diferencia = objetivo - n.valor
 	} else {
-		diferencia = n.resultado - objetivo
+		diferencia = n.valor - objetivo
 	}
 	if diferencia < *aproximacion {
 		*aproximacion = diferencia
@@ -88,25 +91,30 @@ func (n *nodo) encontrarAproximacion(objetivo uint32, aproximacion *uint32, cand
 }
 
 func (n nodo) String() string {
-	if n.padre == nil {
-		return ""
-	} else if n.padre.padre == nil {
-		return fmt.Sprintf("(%d %s %d)", n.operando1, n.calculo, n.operando2)
-	} else if n.operando1 == n.padre.resultado {
-		return fmt.Sprintf("(%s %s %d)", *n.padre, n.calculo, n.operando2)
-	} else if n.operando2 == n.padre.resultado {
-		return fmt.Sprintf("(%d %s %s)", n.operando1, n.calculo, *n.padre)
+	if n.calculo == nop {
+		return fmt.Sprint(n.valor)
 	} else {
-		return fmt.Sprintf("(%d %s %d)", n.operando1, n.calculo, n.operando2)
+		return fmt.Sprintf("(%s %s %s)", n.operando1, n.calculo, n.operando2)
 	}
 }
 
 func Resuelve(operandos []uint32, resultado uint32) string {
-	var raiz = nodo{operandosPorUsar: operandos}
-	raiz.calcularDescendientes()
+	nodosIniciales := make([]*nodo, len(operandos))
+	for i := range nodosIniciales {
+		nodosIniciales[i] = &nodo{calculo: nop, valor: operandos[i]}
+	}
+	for j := range nodosIniciales {
+		nodosIniciales[j].restantes = append(nodosIniciales[j].restantes, nodosIniciales[:j]...)
+		nodosIniciales[j].restantes = append(nodosIniciales[j].restantes, nodosIniciales[j+1:]...)
+	}
+	for _, n := range nodosIniciales {
+		n.calcularDescendientes()
+	}
 	var mejorAproximacion uint32 = 999
 	var nodosCandidatos []*nodo
-	raiz.encontrarAproximacion(resultado, &mejorAproximacion, &nodosCandidatos)
+	for _, n := range nodosIniciales {
+		n.encontrarAproximacion(resultado, &mejorAproximacion, &nodosCandidatos)
+	}
 	var escritorOperaciones strings.Builder
 	if mejorAproximacion == 0 {
 		escritorOperaciones.WriteString("Encontrado exacto:\n")
