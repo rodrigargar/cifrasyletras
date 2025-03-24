@@ -121,10 +121,12 @@ func Resuelve(operandos []uint32, resultado uint32) string {
 	} else {
 		escritorOperaciones.WriteString(fmt.Sprintf("Me quedo a %d:\n", mejorAproximacion))
 	}
-	nodosEscritos := make([]string, len(nodosCandidatos))
-	for i := range nodosCandidatos {
-		nodosEscritos[i] = nodosCandidatos[i].String()
+	nodosEscritos := map[string]struct{}{}
+	for _, candidato := range nodosCandidatos {
+		nodosEscritos[candidato.String()] = struct{}{}
 	}
-	escritorOperaciones.WriteString(strings.Join(nodosEscritos, "\n"))
+	for operacion := range nodosEscritos {
+		escritorOperaciones.WriteString(operacion + "\n")
+	}
 	return escritorOperaciones.String()
 }
